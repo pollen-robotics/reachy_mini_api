@@ -133,9 +133,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // split by nature into two folders:
 //
 //   config/   hand-edited, source of truth, precious (humans only)
-//     - app-list.json   : official app IDs   (curated by Pollen)
-//     - block-list.json : blocked app IDs    (killswitch)
-//     - taxonomy.json   : category list      (slugs/labels/descriptions)
+//     - official-app-list.json : official app IDs (curated by Pollen)
+//     - blocked-app-list.json  : blocked app IDs  (killswitch)
+//     - taxonomy.json          : category list    (slugs/labels/descriptions)
 //   cache/    machine-written, regenerable, disposable (server only)
 //     - categories.json : LLM category cache (written by this server)
 //     - moderation.json : moderation verdict cache (written by server)
@@ -155,8 +155,8 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export const STORE_DATASET =
   process.env.STORE_DATASET || 'pollen-robotics/reachy_mini_store_data';
 const STORE_DATASET_RAW = `https://huggingface.co/datasets/${STORE_DATASET}/raw/main`;
-const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/config/app-list.json`;
-const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/config/block-list.json`;
+const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/config/official-app-list.json`;
+const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/config/blocked-app-list.json`;
 const HF_SPACES_API = 'https://huggingface.co/api/spaces';
 // Note: HF API doesn't support pagination with filter=, so we use a high limit
 const HF_SPACES_LIMIT = 1000;
@@ -302,7 +302,7 @@ let categorizationBatchRunning = false;
 // while two moderation batches never overlap.
 let moderationBatchRunning = false;
 
-// In-memory mirror of the hand-edited block-list.json. Refreshed
+// In-memory mirror of the hand-edited blocked-app-list.json. Refreshed
 // alongside the apps cache (see `fetchAppsFromHF`). Lower-cased IDs.
 let blockedSet = new Set();
 
@@ -587,7 +587,7 @@ async function getJsApps() {
  * Decide whether a JS app is visible in the mobile catalog, and why.
  *
  * Precedence (highest wins):
- *   1. Manual block-list.json (hand-edited killswitch on the official
+ *   1. Manual blocked-app-list.json (hand-edited killswitch on the official
  *      dataset) - force hide. Anyone with write access to the dataset
  *      can block an app by adding its Space ID.
  *   2. Official apps - always visible, moderation skipped (curated).

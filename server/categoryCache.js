@@ -47,8 +47,8 @@ import { commit, createRepo } from '@huggingface/hub';
 
 import { TAXONOMY_VERSION } from './categories.js';
 
-// Single store control-plane dataset (shared with app-list.json,
-// block-list.json and moderation.json - see index.js `STORE_DATASET`).
+// Single store control-plane dataset (shared with official-app-list.json,
+// blocked-app-list.json and moderation.json - see index.js `STORE_DATASET`).
 // The HF_TOKEN must have WRITE access here since this cache commits
 // `categories.json`. Precedence: a dedicated `HF_CATEGORIES_DATASET`
 // wins (escape hatch), else the unified `STORE_DATASET`, else the

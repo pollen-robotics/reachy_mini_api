@@ -170,7 +170,7 @@ let activeAllowedSlugs = new Set(DEFAULT_CATEGORIES.map((c) => c.slug));
 export let TAXONOMY_VERSION = DEFAULT_TAXONOMY_VERSION;
 
 // Where the canonical, hand-editable taxonomy lives in the store
-// dataset. Sibling of `config/app-list.json` / `config/block-list.json`.
+// dataset. Sibling of `config/official-app-list.json` / `config/blocked-app-list.json`.
 const TAXONOMY_FILE_PATH = 'config/taxonomy.json';
 
 export function isValidSlug(slug) {

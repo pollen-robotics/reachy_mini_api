@@ -30,7 +30,7 @@
  * `entries` holds the automated verdicts (regex + LLM), re-computed
  * when a Space's README changes or the policy version bumps. The
  * MANUAL killswitch lives elsewhere: a hand-edited
- * `config/block-list.json` on the official dataset (see `index.js`),
+ * `config/blocked-app-list.json` on the official dataset (see `index.js`),
  * so anyone with dataset write access can block an app without
  * touching this cache.
  */
@@ -39,8 +39,8 @@ import { commit, createRepo } from '@huggingface/hub';
 
 import { MODERATION_POLICY_VERSION } from './moderate.js';
 
-// Single store control-plane dataset (shared with app-list.json,
-// block-list.json and categories.json - see index.js `STORE_DATASET`).
+// Single store control-plane dataset (shared with official-app-list.json,
+// blocked-app-list.json and categories.json - see index.js `STORE_DATASET`).
 // The HF_TOKEN must have WRITE access here since this cache commits
 // `moderation.json`. Precedence: a dedicated `HF_MODERATION_DATASET`
 // wins (escape hatch), else the unified `STORE_DATASET`, else the

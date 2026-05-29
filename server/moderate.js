@@ -8,7 +8,7 @@
  * WebView iframe. Apple App Store guideline 1.2 (and the Google Play
  * UGC policy) require the host to *filter objectionable material*
  * before it reaches users. This module is the automated half of that
- * obligation; the manual half is the hand-edited `block-list.json`
+ * obligation; the manual half is the hand-edited `blocked-app-list.json`
  * killswitch on the official dataset (see `index.js`).
  *
  * Two-layer pipeline (`moderateApp`)
