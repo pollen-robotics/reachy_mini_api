@@ -6,7 +6,7 @@ colorTo: purple
 sdk: docker
 app_port: 7860
 pinned: false
-short_description: Backend API for the Reachy Mini app store (catalog, moderation, ephemeral keys)
+short_description: Backend API for the Reachy Mini app store
 ---
 
 # Reachy Mini API
