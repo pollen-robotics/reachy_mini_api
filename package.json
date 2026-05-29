@@ -1,0 +1,19 @@
+{
+  "name": "reachy-mini-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend API for the Reachy Mini app store: catalog, moderation, OpenAI Realtime ephemeral keys.",
+  "scripts": {
+    "start": "node server/index.js",
+    "start:prod": "NODE_ENV=production node server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@huggingface/hub": "^2.8.1",
+    "compression": "^1.8.1",
+    "express": "^4.21.2"
+  }
+}
