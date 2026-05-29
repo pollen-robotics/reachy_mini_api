@@ -34,9 +34,9 @@ jobs:
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: ${{ vars.HF_USERNAME }}
-          HF_SPACE: ${{ vars.HF_SPACE }}
         run: |
           git config user.email "ci@github-actions"
           git config user.name "github-actions"
-          git push --force "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git" HEAD:main
+          # Token auth: the username part of the URL is ignored by HF,
+          # only HF_TOKEN authenticates. Space target is fixed.
+          git push --force "https://pollen-robotics:${HF_TOKEN}@huggingface.co/spaces/pollen-robotics/reachy-mini-api.git" HEAD:main
