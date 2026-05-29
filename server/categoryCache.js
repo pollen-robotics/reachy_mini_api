@@ -19,7 +19,7 @@
  *
  * Storage shape
  * ─────────────
- *   <dataset>/categories.json
+ *   <dataset>/cache/categories.json
  *
  *   {
  *     "version": 1,
@@ -55,7 +55,7 @@ import { TAXONOMY_VERSION } from './categories.js';
 // pollen-robotics default.
 const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-official-app-store';
 
-const CACHE_FILE_PATH = 'categories.json';
+const CACHE_FILE_PATH = 'cache/categories.json';
 const CACHE_FORMAT_VERSION = 1;
 
 class CategoryCache {

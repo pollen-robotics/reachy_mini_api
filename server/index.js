@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 
 import { categorizeApp, HfTokenMissingError } from './categorize.js';
 import { categoryCache } from './categoryCache.js';
-import { getPublicTaxonomy } from './categories.js';
+import { getPublicTaxonomy, loadTaxonomyFromDataset } from './categories.js';
 import { moderateApp } from './moderate.js';
 import { moderationCache } from './moderationCache.js';
 import { mintEphemeralKeyHandler } from './openaiEphemeral.js';
@@ -129,29 +129,39 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // Store control-plane dataset (single source of truth)
 // =====================================================================
 //
-// One HF dataset holds everything that drives the store catalog, as
-// four sibling files:
-//   - app-list.json   : official app IDs   (hand-edited by Pollen)
-//   - block-list.json : blocked app IDs    (hand-edited killswitch)
-//   - categories.json : LLM category cache (written by this server)
-//   - moderation.json : moderation verdict cache (written by server)
+// One HF dataset holds everything that drives the store catalog,
+// split by nature into two folders:
 //
-// The first two are READ-only from the server (humans edit them on
-// the Hub - anyone with dataset write access can promote or block an
-// app). The last two are WRITTEN by the server, so the Space's
-// HF_TOKEN must have WRITE access to this dataset. Each cache commits
-// only its own file (`addOrUpdate` on a single path), so server
-// writes never clobber the hand-edited lists.
+//   config/   hand-edited, source of truth, precious (humans only)
+//     - app-list.json   : official app IDs   (curated by Pollen)
+//     - block-list.json : blocked app IDs    (killswitch)
+//     - taxonomy.json   : category list      (slugs/labels/descriptions)
+//   cache/    machine-written, regenerable, disposable (server only)
+//     - categories.json : LLM category cache (written by this server)
+//     - moderation.json : moderation verdict cache (written by server)
 //
-// `STORE_DATASET` is the single knob: point it at any
-// `namespace/name` and all four files follow. The category and
-// moderation caches read the same env (see their modules), so there
-// is exactly one place to change.
+// `config/*` is READ-only from the server (humans edit it on the Hub -
+// anyone with dataset write access can promote/block an app or change
+// the taxonomy without a code deploy). `cache/*` is WRITTEN by the
+// server, so the Space's HF_TOKEN must have WRITE access. Each cache
+// commits only its own file (`addOrUpdate` on a single path), so
+// server writes never clobber the hand-edited config, and `cache/`
+// can be wiped at any time (the server repopulates it).
+//
+// `STORE_DATASET` is the single knob: point it at any `namespace/name`
+// and every file follows. The category/moderation caches and the
+// taxonomy loader read the same env, so there is exactly one place to
+// change.
 export const STORE_DATASET =
   process.env.STORE_DATASET || 'pollen-robotics/reachy-mini-official-app-store';
 const STORE_DATASET_RAW = `https://huggingface.co/datasets/${STORE_DATASET}/raw/main`;
-const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/app-list.json`;
-const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/block-list.json`;
+const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/config/app-list.json`;
+const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/config/block-list.json`;
+// Transitional fallback to the pre-`config/` flat layout, so a deploy
+// is safe whether or not the dataset has been restructured yet. Remove
+// once the dataset's root app-list.json / block-list.json are gone.
+const OFFICIAL_APP_LIST_URL_LEGACY = `${STORE_DATASET_RAW}/app-list.json`;
+const BLOCK_LIST_URL_LEGACY = `${STORE_DATASET_RAW}/block-list.json`;
 const HF_SPACES_API = 'https://huggingface.co/api/spaces';
 // Note: HF API doesn't support pagination with filter=, so we use a high limit
 const HF_SPACES_LIMIT = 1000;
@@ -308,6 +318,21 @@ let appsCache = {
   fetching: false,
 };
 
+// Try each URL in order, returning the first OK response (or null).
+// Used to read a `config/` file with a fallback to the legacy root
+// path during the dataset restructure.
+async function fetchFirstOk(urls) {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+    } catch {
+      // network error - try the next candidate
+    }
+  }
+  return null;
+}
+
 // Fetch apps from HuggingFace API
 // Returns format compatible with desktop app (with url, source_kind, extra)
 async function fetchAppsFromHF() {
@@ -316,12 +341,13 @@ async function fetchAppsFromHF() {
   try {
     // 1. Fetch official app IDs + the manual block-list (killswitch).
     // Both are plain JSON arrays of Space IDs on the same dataset.
+    // Prefer the `config/` location, fall back to the legacy root path.
     const [officialResponse, blockResponse] = await Promise.all([
-      fetch(OFFICIAL_APP_LIST_URL),
-      fetch(BLOCK_LIST_URL).catch(() => null),
+      fetchFirstOk([OFFICIAL_APP_LIST_URL, OFFICIAL_APP_LIST_URL_LEGACY]),
+      fetchFirstOk([BLOCK_LIST_URL, BLOCK_LIST_URL_LEGACY]),
     ]);
     let officialIdList = [];
-    if (officialResponse.ok) {
+    if (officialResponse && officialResponse.ok) {
       officialIdList = await officialResponse.json();
     }
     const officialSet = new Set(officialIdList.map(id => id.toLowerCase()));
@@ -1047,6 +1073,10 @@ async function warmCache() {
     // for stale entries only.
     void (async () => {
       try {
+        // Load the editable taxonomy from the dataset FIRST so the
+        // category cache prunes stale entries against the live
+        // version (and the LLM prompt uses the live descriptions).
+        await loadTaxonomyFromDataset(STORE_DATASET, process.env.HF_TOKEN);
         await Promise.all([categoryCache.load(), moderationCache.load()]);
         const jsApps = dedupJsApps(
           apps.filter((a) => {

@@ -7,7 +7,7 @@
  *
  * Storage shape
  * ─────────────
- *   <dataset>/moderation.json
+ *   <dataset>/cache/moderation.json
  *
  *   {
  *     "version": 1,
@@ -29,9 +29,10 @@
  *
  * `entries` holds the automated verdicts (regex + LLM), re-computed
  * when a Space's README changes or the policy version bumps. The
- * MANUAL killswitch lives elsewhere: a hand-edited `block-list.json`
- * on the official dataset (see `index.js`), so anyone with dataset
- * write access can block an app without touching this cache.
+ * MANUAL killswitch lives elsewhere: a hand-edited
+ * `config/block-list.json` on the official dataset (see `index.js`),
+ * so anyone with dataset write access can block an app without
+ * touching this cache.
  */
 
 import { commit, createRepo } from '@huggingface/hub';
@@ -46,7 +47,7 @@ import { MODERATION_POLICY_VERSION } from './moderate.js';
 // pollen-robotics default.
 const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-official-app-store';
 
-const CACHE_FILE_PATH = 'moderation.json';
+const CACHE_FILE_PATH = 'cache/moderation.json';
 const CACHE_FORMAT_VERSION = 1;
 
 class ModerationCache {

@@ -23,11 +23,17 @@
  */
 
 /**
- * Bump this when the slug list OR the descriptions change in a way
- * that affects the LLM output. The cache layer invalidates entries
- * whose taxonomyVersion is older than this and reclassifies them on
- * the next pass. We don't bump it for cosmetic edits (label / emoji)
- * since those don't reach the LLM.
+ * Default taxonomy version, used as a fallback when the dataset's
+ * `config/taxonomy.json` is missing/unreadable. The LIVE version is
+ * exported as the mutable `TAXONOMY_VERSION` below and is overwritten
+ * by `loadTaxonomyFromDataset()` at boot.
+ *
+ * Bump the version (in the dataset file, or here for the fallback)
+ * when the slug list OR the descriptions change in a way that affects
+ * the LLM output: the cache layer invalidates entries whose
+ * taxonomyVersion is older and reclassifies them on the next pass.
+ * Cosmetic edits (label / emoji) don't need a bump since they don't
+ * reach the LLM.
  *
  * History:
  *   - v1: initial 8-slug taxonomy.
@@ -39,19 +45,23 @@
  *   - v4: renamed `dance` to `motion` (broader: marionette, replay,
  *         choreography without music). Music-driven dance parties
  *         now belong to `music` since music is what drives them.
+ *   - v4 (data-driven): the canonical list now lives in the dataset
+ *         at `config/taxonomy.json`; this array is only the cold-start
+ *         fallback. Editing categories no longer requires a code deploy.
  */
-export const TAXONOMY_VERSION = 4;
+const DEFAULT_TAXONOMY_VERSION = 4;
 
 /**
- * Canonical category list. Keep slugs short, kebab-case, and
- * memorable: they end up in URLs (e.g. `?cat=music`) and in
- * filter chips on mobile.
+ * Default category list (cold-start fallback). The canonical, editable
+ * list lives in the dataset at `config/taxonomy.json` and is loaded
+ * over this at boot. Keep slugs short, kebab-case, and memorable: they
+ * end up in URLs (e.g. `?cat=music`) and in filter chips on mobile.
  *
- * The `description` field is the SOLE source of truth the LLM
- * sees - keep them factual, scope-bounded, and example-led so
- * the model has signal for both inclusion and exclusion.
+ * The `description` field is the SOLE source of truth the LLM sees -
+ * keep them factual, scope-bounded, and example-led so the model has
+ * signal for both inclusion and exclusion.
  */
-export const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   {
     slug: 'music',
     label: 'Music & Beats',
@@ -147,10 +157,112 @@ export const CATEGORIES = [
   },
 ];
 
-export const ALLOWED_SLUGS = new Set(CATEGORIES.map((c) => c.slug));
+// ───────────────────────────────────────────────────────────────────
+// Live taxonomy state
+// ───────────────────────────────────────────────────────────────────
+// The active taxonomy starts as the hardcoded default and is replaced
+// in place by `loadTaxonomyFromDataset()` at boot. We keep the
+// version as a mutable `export let` so consumers that imported it
+// (e.g. categoryCache.js) observe the loaded value via the ES module
+// live binding - they read it at runtime, after the loader has run.
+let activeCategories = DEFAULT_CATEGORIES;
+let activeAllowedSlugs = new Set(DEFAULT_CATEGORIES.map((c) => c.slug));
+export let TAXONOMY_VERSION = DEFAULT_TAXONOMY_VERSION;
+
+// Where the canonical, hand-editable taxonomy lives in the store
+// dataset. Sibling of `config/app-list.json` / `config/block-list.json`.
+const TAXONOMY_FILE_PATH = 'config/taxonomy.json';
 
 export function isValidSlug(slug) {
-  return ALLOWED_SLUGS.has(slug);
+  return activeAllowedSlugs.has(slug);
+}
+
+/**
+ * Full taxonomy object (WITH descriptions) used to seed / mirror the
+ * dataset file. Shape matches what `loadTaxonomyFromDataset()` parses.
+ */
+export function getFullTaxonomy() {
+  return {
+    version: TAXONOMY_VERSION,
+    categories: activeCategories.map((c) => ({
+      slug: c.slug,
+      label: c.label,
+      emoji: c.emoji,
+      description: c.description,
+    })),
+  };
+}
+
+/**
+ * Load the canonical taxonomy from the dataset's `config/taxonomy.json`
+ * and swap it in over the hardcoded default. Best-effort: a missing
+ * file, a 404, malformed JSON, or an empty list all keep the default
+ * (so the server always has a working taxonomy). Call this ONCE at
+ * boot, BEFORE loading the category cache (so the cache's stale-version
+ * pruning compares against the live version).
+ *
+ * Returns true when the dataset taxonomy was applied, false when we
+ * fell back to the default.
+ */
+export async function loadTaxonomyFromDataset(repoName, token) {
+  const url = `https://huggingface.co/datasets/${repoName}/resolve/main/${TAXONOMY_FILE_PATH}`;
+  try {
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      console.log(
+        `[Taxonomy] ${TAXONOMY_FILE_PATH} not found on ${repoName} ` +
+          `(HTTP ${res.status}) - using built-in default (v${TAXONOMY_VERSION}).`,
+      );
+      return false;
+    }
+    const data = await res.json();
+    const version = Number.isInteger(data?.version) ? data.version : null;
+    const rawCats = Array.isArray(data?.categories) ? data.categories : null;
+    if (version === null || !rawCats) {
+      console.warn(
+        `[Taxonomy] Malformed ${TAXONOMY_FILE_PATH} on ${repoName} - ` +
+          `keeping built-in default (v${TAXONOMY_VERSION}).`,
+      );
+      return false;
+    }
+    const cleaned = [];
+    const seen = new Set();
+    for (const c of rawCats) {
+      if (!c || typeof c.slug !== 'string') continue;
+      const slug = c.slug.trim().toLowerCase();
+      if (!slug || seen.has(slug)) continue;
+      seen.add(slug);
+      cleaned.push({
+        slug,
+        label: typeof c.label === 'string' && c.label.trim() ? c.label : slug,
+        emoji: typeof c.emoji === 'string' ? c.emoji : '',
+        description: typeof c.description === 'string' ? c.description : '',
+      });
+    }
+    if (cleaned.length === 0) {
+      console.warn(
+        `[Taxonomy] ${TAXONOMY_FILE_PATH} has no valid categories - ` +
+          `keeping built-in default (v${TAXONOMY_VERSION}).`,
+      );
+      return false;
+    }
+    activeCategories = cleaned;
+    activeAllowedSlugs = new Set(cleaned.map((c) => c.slug));
+    TAXONOMY_VERSION = version;
+    console.log(
+      `[Taxonomy] Loaded ${cleaned.length} categories (v${version}) from ` +
+        `${repoName}/${TAXONOMY_FILE_PATH}.`,
+    );
+    return true;
+  } catch (err) {
+    console.warn(
+      `[Taxonomy] Load failed (${err.message}) - keeping built-in ` +
+        `default (v${TAXONOMY_VERSION}).`,
+    );
+    return false;
+  }
 }
 
 /**
@@ -158,7 +270,7 @@ export function isValidSlug(slug) {
  * (mobile shell, website filter chips). We strip the `description`
  * field on purpose: it is sized + worded for the LLM prompt and
  * carries no UI value (clients render `label` + `emoji`). Render
- * order is the index in `CATEGORIES`, surfaced as `order` so a
+ * order is the index in the active taxonomy, surfaced as `order` so a
  * client that needs to re-sort (e.g. alphabetical view) keeps the
  * canonical order one field-away.
  *
@@ -168,7 +280,7 @@ export function isValidSlug(slug) {
  * dropping one is a breaking change for any client mirror.
  */
 export function getPublicTaxonomy() {
-  return CATEGORIES.map((c, index) => ({
+  return activeCategories.map((c, index) => ({
     slug: c.slug,
     label: c.label,
     emoji: c.emoji,
@@ -182,7 +294,7 @@ export function getPublicTaxonomy() {
  * to nudge it towards copying the exact string back.
  */
 export function buildLlmCategoryList() {
-  return CATEGORIES.map((c) => `- ${c.slug}: ${c.description}`).join('\n');
+  return activeCategories.map((c) => `- ${c.slug}: ${c.description}`).join('\n');
 }
 
 /**
@@ -203,7 +315,7 @@ export function sanitizeSlugs(raw, maxCategories = 3) {
     if (typeof v !== 'string') continue;
     const slug = v.trim().toLowerCase();
     if (!slug || seen.has(slug)) continue;
-    if (!ALLOWED_SLUGS.has(slug)) continue;
+    if (!activeAllowedSlugs.has(slug)) continue;
     seen.add(slug);
     out.push(slug);
     if (out.length >= maxCategories) break;
