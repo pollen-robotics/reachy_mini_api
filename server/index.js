@@ -85,7 +85,12 @@ const CORS_ALLOWED_ORIGINS = new Set([
   'http://localhost:1420',
   'http://localhost:5173',
   // Showcase website Space (now a separate static deploy that calls
-  // this API cross-origin). Test (tfrere) + prod (pollen-robotics).
+  // this API cross-origin). Static Spaces are served from the
+  // `.static.hf.space` host, so that exact origin is what the browser
+  // sends. Keep the plain `.hf.space` variant too in case of aliasing.
+  // Test (tfrere) + prod (pollen-robotics).
+  'https://tfrere-reachy-mini-website.static.hf.space',
+  'https://pollen-robotics-reachy-mini-website.static.hf.space',
   'https://tfrere-reachy-mini-website.hf.space',
   'https://pollen-robotics-reachy-mini-website.hf.space',
 ]);
