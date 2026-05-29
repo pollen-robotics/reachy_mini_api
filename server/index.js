@@ -153,7 +153,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // taxonomy loader read the same env, so there is exactly one place to
 // change.
 export const STORE_DATASET =
-  process.env.STORE_DATASET || 'pollen-robotics/reachy-mini-store-data';
+  process.env.STORE_DATASET || 'pollen-robotics/reachy_mini_store_data';
 const STORE_DATASET_RAW = `https://huggingface.co/datasets/${STORE_DATASET}/raw/main`;
 const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/config/app-list.json`;
 const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/config/block-list.json`;
