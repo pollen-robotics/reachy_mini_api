@@ -53,7 +53,7 @@ import { TAXONOMY_VERSION } from './categories.js';
 // `categories.json`. Precedence: a dedicated `HF_CATEGORIES_DATASET`
 // wins (escape hatch), else the unified `STORE_DATASET`, else the
 // pollen-robotics default.
-const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-official-app-store';
+const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-store-data';
 
 const CACHE_FILE_PATH = 'cache/categories.json';
 const CACHE_FORMAT_VERSION = 1;

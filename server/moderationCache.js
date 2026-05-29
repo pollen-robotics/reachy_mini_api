@@ -45,7 +45,7 @@ import { MODERATION_POLICY_VERSION } from './moderate.js';
 // `moderation.json`. Precedence: a dedicated `HF_MODERATION_DATASET`
 // wins (escape hatch), else the unified `STORE_DATASET`, else the
 // pollen-robotics default.
-const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-official-app-store';
+const DEFAULT_DATASET = 'pollen-robotics/reachy-mini-store-data';
 
 const CACHE_FILE_PATH = 'cache/moderation.json';
 const CACHE_FORMAT_VERSION = 1;

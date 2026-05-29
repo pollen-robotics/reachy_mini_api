@@ -153,15 +153,10 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // taxonomy loader read the same env, so there is exactly one place to
 // change.
 export const STORE_DATASET =
-  process.env.STORE_DATASET || 'pollen-robotics/reachy-mini-official-app-store';
+  process.env.STORE_DATASET || 'pollen-robotics/reachy-mini-store-data';
 const STORE_DATASET_RAW = `https://huggingface.co/datasets/${STORE_DATASET}/raw/main`;
 const OFFICIAL_APP_LIST_URL = `${STORE_DATASET_RAW}/config/app-list.json`;
 const BLOCK_LIST_URL = `${STORE_DATASET_RAW}/config/block-list.json`;
-// Transitional fallback to the pre-`config/` flat layout, so a deploy
-// is safe whether or not the dataset has been restructured yet. Remove
-// once the dataset's root app-list.json / block-list.json are gone.
-const OFFICIAL_APP_LIST_URL_LEGACY = `${STORE_DATASET_RAW}/app-list.json`;
-const BLOCK_LIST_URL_LEGACY = `${STORE_DATASET_RAW}/block-list.json`;
 const HF_SPACES_API = 'https://huggingface.co/api/spaces';
 // Note: HF API doesn't support pagination with filter=, so we use a high limit
 const HF_SPACES_LIMIT = 1000;
@@ -318,21 +313,6 @@ let appsCache = {
   fetching: false,
 };
 
-// Try each URL in order, returning the first OK response (or null).
-// Used to read a `config/` file with a fallback to the legacy root
-// path during the dataset restructure.
-async function fetchFirstOk(urls) {
-  for (const url of urls) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return res;
-    } catch {
-      // network error - try the next candidate
-    }
-  }
-  return null;
-}
-
 // Fetch apps from HuggingFace API
 // Returns format compatible with desktop app (with url, source_kind, extra)
 async function fetchAppsFromHF() {
@@ -340,14 +320,13 @@ async function fetchAppsFromHF() {
   
   try {
     // 1. Fetch official app IDs + the manual block-list (killswitch).
-    // Both are plain JSON arrays of Space IDs on the same dataset.
-    // Prefer the `config/` location, fall back to the legacy root path.
+    // Both are plain JSON arrays of Space IDs under the dataset's config/.
     const [officialResponse, blockResponse] = await Promise.all([
-      fetchFirstOk([OFFICIAL_APP_LIST_URL, OFFICIAL_APP_LIST_URL_LEGACY]),
-      fetchFirstOk([BLOCK_LIST_URL, BLOCK_LIST_URL_LEGACY]),
+      fetch(OFFICIAL_APP_LIST_URL),
+      fetch(BLOCK_LIST_URL).catch(() => null),
     ]);
     let officialIdList = [];
-    if (officialResponse && officialResponse.ok) {
+    if (officialResponse.ok) {
       officialIdList = await officialResponse.json();
     }
     const officialSet = new Set(officialIdList.map(id => id.toLowerCase()));
