@@ -21,6 +21,11 @@ jobs:
       # gate so we never ship a server that won't boot.
       - name: Syntax check
         run: for f in server/*.js; do node --check "$f"; done
+      # Unit tests (built-in node:test runner, no deps). Gates the
+      # deploy: the `deploy` job `needs: validate`, so a red test
+      # blocks the push to the Space.
+      - name: Run tests
+        run: npm test
 
   deploy:
     needs: validate
