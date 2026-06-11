@@ -9,6 +9,12 @@ import { categoryCache } from './categoryCache.js';
 import { getPublicTaxonomy, loadTaxonomyFromDataset } from './categories.js';
 import { moderateApp } from './moderate.js';
 import { moderationCache } from './moderationCache.js';
+import { decideVisibility } from './visibility.js';
+import {
+  dedupToolsByName,
+  fetchMcpToolsFromHF,
+  MCP_TOOL_TAG,
+} from './mcpTools.js';
 import { mintEphemeralKeyHandler } from './openaiEphemeral.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -313,6 +319,16 @@ let appsCache = {
   fetching: false,
 };
 
+// Independent in-memory cache for the MCP tool catalog. Kept separate
+// from `appsCache` because it queries a different HF tag filter
+// (`reachy-mini-tool` vs `reachy_mini`) and the two catalogs barely
+// overlap - sharing one cache would force both to refetch together.
+let mcpToolsCache = {
+  data: null,
+  lastFetch: null,
+  fetching: false,
+};
+
 // Fetch apps from HuggingFace API
 // Returns format compatible with desktop app (with url, source_kind, extra)
 async function fetchAppsFromHF() {
@@ -539,6 +555,94 @@ app.get('/api/apps', async (req, res) => {
 });
 
 // =====================================================================
+// MCP tool catalog
+// =====================================================================
+//
+// `/api/mcp-tools` is the catalog of MCP tool sources: public HF Spaces
+// tagged `reachy-mini-tool` that expose the standard Gradio MCP endpoint.
+// It mirrors `/api/apps` (cache + dedup + cache headers) and adds, for
+// each entry, the resolved `mcpUrl` a client needs to wire up a transport.
+//
+// Unlike `/api/js-apps` there is no LLM categorization here; the only
+// safety gate is the shared block-list killswitch (see `computeVisibility`-
+// style filtering below), enforced by default so a blocked Space never
+// reaches a client. `?includeHidden=true` bypasses it for admin/debug and
+// keeps the `isBlocked` flag for inspection.
+
+/**
+ * Get the raw MCP tool catalog with caching. Same shape and TTL policy as
+ * `getRawApps`: serve a warm cache, dedupe concurrent fetches, and fall
+ * back to stale data on upstream failure rather than emptying the catalog.
+ */
+async function getRawMcpTools() {
+  const now = Date.now();
+
+  if (
+    mcpToolsCache.data &&
+    mcpToolsCache.lastFetch &&
+    now - mcpToolsCache.lastFetch < CACHE_TTL_MS
+  ) {
+    const ageMinutes = Math.round((now - mcpToolsCache.lastFetch) / 60000);
+    console.log(`[MCP] Returning cached tools (age: ${ageMinutes} min)`);
+    return mcpToolsCache.data;
+  }
+
+  if (mcpToolsCache.fetching) {
+    console.log('[MCP] Fetch already in progress, returning stale data');
+    return mcpToolsCache.data || [];
+  }
+
+  mcpToolsCache.fetching = true;
+  try {
+    console.log(`[MCP] Fetching tool Spaces tagged "${MCP_TOOL_TAG}"...`);
+    const tools = await fetchMcpToolsFromHF({
+      hfSpacesApi: HF_SPACES_API,
+      limit: HF_SPACES_LIMIT,
+      officialListUrl: OFFICIAL_APP_LIST_URL,
+      blockListUrl: BLOCK_LIST_URL,
+    });
+    mcpToolsCache.data = tools;
+    mcpToolsCache.lastFetch = now;
+    console.log(`[MCP] Cache updated with ${tools.length} tool Space(s)`);
+    return tools;
+  } catch (err) {
+    if (mcpToolsCache.data) {
+      console.log('[MCP] Fetch failed, returning stale cache');
+      return mcpToolsCache.data;
+    }
+    throw err;
+  } finally {
+    mcpToolsCache.fetching = false;
+  }
+}
+
+app.get('/api/mcp-tools', async (req, res) => {
+  try {
+    const raw = await getRawMcpTools();
+    const deduped = dedupToolsByName(raw);
+
+    // Enforce the block-list killswitch by default. These entries describe
+    // tools the assistant may actually invoke, so a blocked Space must not
+    // surface to clients. `?includeHidden=true` is the admin/debug escape.
+    const includeHidden = req.query.includeHidden === 'true';
+    const tools = includeHidden
+      ? deduped
+      : deduped.filter((t) => t.isBlocked !== true);
+
+    setCatalogCacheHeaders(res, mcpToolsCache.lastFetch);
+    res.json({
+      tools,
+      cached: true,
+      count: tools.length,
+      hidden: deduped.length - tools.length,
+    });
+  } catch (err) {
+    console.error('[API] /api/mcp-tools error:', err);
+    res.status(500).json({ error: 'Failed to fetch MCP tools' });
+  }
+});
+
+// =====================================================================
 // JS apps + LLM-inferred categories
 // =====================================================================
 //
@@ -586,62 +690,21 @@ async function getJsApps() {
 /**
  * Decide whether a JS app is visible in the mobile catalog, and why.
  *
- * Precedence (highest wins):
- *   1. Manual blocked-app-list.json (hand-edited killswitch on the official
- *      dataset) - force hide. Anyone with write access to the dataset
- *      can block an app by adding its Space ID.
- *   2. Official apps - always visible, moderation skipped (curated).
- *   3. Automated verdict (regex + LLM) from the moderation cache: a
- *      `block` hides the app, anything else stays visible.
- *
- * Fail-open: an app with no verdict yet (cold / pending) stays
- * visible - a transient LLM hiccup never empties the catalog. The
- * regex layer + manual block-list remain the hard backstops.
+ * Thin wrapper: looks up the cached moderation verdict and delegates
+ * the fail-closed policy to the pure `decideVisibility` in
+ * `visibility.js` (which is unit-tested in isolation - see
+ * `test/visibility.test.mjs`). Only an explicit `allow` verdict (or a
+ * curated official app) is visible; a `block`, a `review`, a manual
+ * block-list hit, or no verdict yet all keep the app hidden, so a new
+ * Space never appears before moderation has explicitly cleared it
+ * (App Store guideline 1.2).
  *
  * Returns `{ visible, source, decision, category, reason }` so the
  * payload can explain a hide to the website / admins without leaking
  * a blocked app's content.
  */
 function computeVisibility(app) {
-  if (app.isBlocked) {
-    return {
-      visible: false,
-      source: 'blocklist',
-      decision: 'block',
-      category: null,
-      reason: 'manual block-list',
-    };
-  }
-
-  if (app.isOfficial) {
-    return {
-      visible: true,
-      source: 'official',
-      decision: 'allow',
-      category: 'none',
-      reason: 'official app (moderation skipped)',
-    };
-  }
-
-  const verdict = moderationCache.get(app.id);
-  if (verdict) {
-    return {
-      visible: verdict.decision !== 'block',
-      source: verdict.source || 'llm',
-      decision: verdict.decision,
-      category: verdict.category,
-      reason: verdict.reason,
-    };
-  }
-
-  // No verdict yet (cold / pending classification) - fail open.
-  return {
-    visible: true,
-    source: 'pending',
-    decision: 'review',
-    category: null,
-    reason: 'awaiting moderation (fail-open)',
-  };
+  return decideVisibility(app, moderationCache.get(app.id));
 }
 
 /**
@@ -1016,6 +1079,8 @@ app.get('/api/health', (req, res) => {
     cacheStatus: appsCache.data ? 'warm' : 'cold',
     cacheAge: appsCache.lastFetch ? Math.round((Date.now() - appsCache.lastFetch) / 1000) : null,
     appsCount: appsCache.data?.length || 0,
+    mcpToolsCacheStatus: mcpToolsCache.data ? 'warm' : 'cold',
+    mcpToolsCount: mcpToolsCache.data?.length || 0,
   });
 });
 
@@ -1023,8 +1088,12 @@ app.get('/api/health', (req, res) => {
 app.post('/api/refresh', async (req, res) => {
   try {
     appsCache.lastFetch = null; // Invalidate cache
-    const apps = await getRawApps();
-    res.json({ success: true, count: apps.length });
+    mcpToolsCache.lastFetch = null; // Invalidate MCP tool cache too
+    const [apps, mcpTools] = await Promise.all([
+      getRawApps(),
+      getRawMcpTools().catch(() => []),
+    ]);
+    res.json({ success: true, count: apps.length, mcpToolsCount: mcpTools.length });
   } catch (err) {
     res.status(500).json({ error: 'Failed to refresh cache' });
   }
@@ -1041,6 +1110,16 @@ app.use((req, res) => {
 // Pre-warm cache on startup
 async function warmCache() {
   console.log('[Startup] Pre-warming cache...');
+
+  // MCP tool catalog warm-up: fire-and-forget so a slow tool listing
+  // never delays the (more critical) app catalog warm-up below. Its own
+  // cache + stale-fallback make a transient failure here harmless.
+  void getRawMcpTools()
+    .then((tools) =>
+      console.log(`[Startup] MCP tool cache warmed (${tools.length} Space(s))`),
+    )
+    .catch((err) => console.error('[Startup] MCP tool warm-up failed:', err));
+
   try {
     const apps = await getRawApps();
     console.log('[Startup] Cache warmed successfully');
@@ -1066,13 +1145,15 @@ async function warmCache() {
         console.log(
           `[Startup] Found ${jsApps.length} JS apps; checking categories + moderation...`,
         );
-        // Categories first, then moderation - they share the HF
+        // Moderation first, then categories - they share the HF
         // Inference token, so running them serially avoids doubling
-        // the burst on a cold start. Moderation is the more
-        // review-critical of the two, but a few seconds later is
-        // fine (the catalog is fail-open until verdicts land).
-        await runCategorizationBatch(jsApps);
+        // the burst on a cold start. Since the catalog is fail-closed
+        // (non-official apps are hidden until an explicit `allow`
+        // verdict lands), moderation is the visibility gate and runs
+        // first so cleared apps surface as soon as possible; categories
+        // are cosmetic and can fill in a few seconds later.
         await runModerationBatch(jsApps);
+        await runCategorizationBatch(jsApps);
       } catch (err) {
         console.error('[Startup] Categorization/moderation warm-up failed:', err);
       }

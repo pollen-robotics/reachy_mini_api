@@ -21,6 +21,7 @@ marketing site.
 |-------|---------|----------|
 | `GET /api/js-apps` | JS app catalog (categorized + moderated) | mobile app |
 | `GET /api/apps` | full catalog (Python + JS) | website |
+| `GET /api/mcp-tools` | MCP tool catalog (Spaces tagged `reachy-mini-tool`, with resolved `mcpUrl`) | mobile app |
 | `GET /api/categories` | category taxonomy | clients |
 | `POST /api/openai/ephemeral` | mint short-lived OpenAI Realtime keys | mobile app |
 | `GET /api/oauth-config` | public OAuth client id | website (fallback) |

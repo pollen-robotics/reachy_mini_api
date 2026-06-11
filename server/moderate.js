@@ -27,18 +27,23 @@
  * Three outcomes, not two
  * ───────────────────────
  * The verdict `decision` is one of `allow` | `block` | `review`.
- * `review` (the LLM is unsure) stays visible in `open` mode but is
- * flagged so it can be triaged / killswitched, and is hidden in
- * `allowlist` mode. This avoids both over-blocking and over-exposing.
+ * The catalog runs fail-closed (see `computeVisibility` in `index.js`):
+ * ONLY an explicit `allow` is shown. `block` (clear violation) and
+ * `review` (the LLM is unsure) are both quarantined. The `review`
+ * bucket therefore over-blocks-on-doubt by design - an ambiguous app
+ * stays hidden until a human triages it (e.g. via the manual
+ * allow/block lists) rather than being exposed to users.
  *
  * Robustness contract
  * ───────────────────
  * `moderateApp` NEVER throws on transient failure (network, 429,
  * malformed JSON). It returns `null`, which the cache layer reads as
- * "not yet moderated; retry next pass" (fail-open: an upstream hiccup
- * never empties the catalog - the regex layer + manual killswitch
- * remain the backstops). Hard errors (HF_TOKEN missing) throw
- * `HfTokenMissingError` so the caller can short-circuit the batch.
+ * "not yet moderated; retry next pass". Because the catalog is
+ * fail-closed, an unmoderated app stays HIDDEN until a verdict lands,
+ * so an upstream hiccup never leaks unmoderated content (it just keeps
+ * the app out of the catalog a little longer). Hard errors (HF_TOKEN
+ * missing) throw `HfTokenMissingError` so the caller can short-circuit
+ * the batch.
  *
  * This mirrors `categorize.js` on purpose: same HF Inference path,
  * same README fetch/clean (imported, not duplicated), same JSON
