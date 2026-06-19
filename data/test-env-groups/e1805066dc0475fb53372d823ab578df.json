@@ -1,0 +1,1 @@
+{"id":"e1805066dc0475fb53372d823ab578df","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs returns [] on garbage input","name":"sanitizeSlugs returns [] on garbage input","status":"passed","testResultsByEnv":{"default":"8503e544c4b184157e3061abbf66071d"}}

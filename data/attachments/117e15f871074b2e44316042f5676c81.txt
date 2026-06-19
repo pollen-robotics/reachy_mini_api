@@ -1,0 +1,2 @@
+[Taxonomy] Malformed config/taxonomy.json on owner/ds - keeping built-in default (v4).
+[Taxonomy] config/taxonomy.json has no valid categories - keeping built-in default (v4).

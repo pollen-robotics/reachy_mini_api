@@ -1,0 +1,3 @@
+[Taxonomy] config/taxonomy.json not found on owner/missing (HTTP 404) - using built-in default (v4).
+[Taxonomy] Loaded 2 categories (v9) from owner/ds/config/taxonomy.json.
+[Taxonomy] Loaded 9 categories (v4) from owner/ds/config/taxonomy.json.

@@ -1,0 +1,1 @@
+{"id":"0857b8d2366b1e52b601f563c76950c8","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs honours an explicit max (single-label mode)","name":"sanitizeSlugs honours an explicit max (single-label mode)","status":"passed","testResultsByEnv":{"default":"7db2953171e55e91f9490ab62956bff8"}}
