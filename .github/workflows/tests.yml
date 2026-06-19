@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Needed for the gh-pages publish step.
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests (Allure results)
+        env:
+          ALLURE_RESULTS_DIR: allure-results
+        run: npm run test:allure
+
+      # Everything below builds + publishes the Allure report even when tests
+      # fail, so the report always reflects the latest run.
+      - name: Get previous Allure history
+        if: always()
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages-prev
+
+      - name: Restore Allure history
+        if: always()
+        run: |
+          if [ -d gh-pages-prev/history ]; then
+            mkdir -p allure-results/history
+            cp -r gh-pages-prev/history/* allure-results/history/ || true
+          fi
+
+      - name: Setup Java (Allure CLI)
+        if: always()
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Allure CLI
+        if: always()
+        run: npm install -g allure-commandline
+
+      - name: Generate Allure report
+        if: always()
+        run: allure generate allure-results --clean -o allure-report
+
+      - name: Publish to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-report

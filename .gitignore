@@ -3,3 +3,5 @@ node_modules
 .env
 .DS_Store
 _migrate.mjs
+allure-results
+allure-report
