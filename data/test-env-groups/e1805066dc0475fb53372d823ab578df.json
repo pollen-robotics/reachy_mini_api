@@ -1,1 +1,1 @@
-{"id":"e1805066dc0475fb53372d823ab578df","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs returns [] on garbage input","name":"sanitizeSlugs returns [] on garbage input","status":"passed","testResultsByEnv":{"default":"83f480af36683564db289664918ca534"}}
+{"id":"e1805066dc0475fb53372d823ab578df","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs returns [] on garbage input","name":"sanitizeSlugs returns [] on garbage input","status":"passed","testResultsByEnv":{"default":"8ed671fa229e5a2c1e6fce8c6c7e5129"}}

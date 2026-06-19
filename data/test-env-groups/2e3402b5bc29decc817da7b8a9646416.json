@@ -1,1 +1,1 @@
-{"id":"2e3402b5bc29decc817da7b8a9646416","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs trims + lowercases","name":"sanitizeSlugs trims + lowercases","status":"passed","testResultsByEnv":{"default":"415ffd6c746ec0a37f242abaf747d724"}}
+{"id":"2e3402b5bc29decc817da7b8a9646416","fullName":"reachy-mini-api:test/categories.test.mjs#sanitizeSlugs trims + lowercases","name":"sanitizeSlugs trims + lowercases","status":"passed","testResultsByEnv":{"default":"1de9c2d48ee7a67d2cde79a2168a1ea5"}}
