@@ -19,6 +19,8 @@
     "express": "^4.21.2"
   },
   "devDependencies": {
+    "@allurereport/plugin-awesome": "^3.12.0",
+    "allure": "^3.12.0",
     "allure-js-commons": "^3.10.0",
     "allure-node-test": "^3.10.0"
   }
