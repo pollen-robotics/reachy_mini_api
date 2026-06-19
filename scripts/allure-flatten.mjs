@@ -21,7 +21,9 @@ const fileSuiteName = (result) => {
   const match = fullName.match(/:([^#]+)#/) || fullName.match(/^([^#]+)#/);
   const relative = match ? match[1] : "";
   const base = relative.split("/").pop() || relative;
-  return base.replace(/\.test\.(mjs|cjs|js|ts)$/i, "").replace(/\.(mjs|cjs|js|ts)$/i, "");
+  const stem = base.replace(/\.test\.(mjs|cjs|js|ts)$/i, "").replace(/\.(mjs|cjs|js|ts)$/i, "");
+  // Prefix with `test_` to mirror the pytest module naming (e.g. test_signaling).
+  return stem ? (stem.startsWith("test_") ? stem : `test_${stem}`) : stem;
 };
 
 let patched = 0;
