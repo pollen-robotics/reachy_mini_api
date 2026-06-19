@@ -28,6 +28,12 @@ jobs:
           ALLURE_RESULTS_DIR: allure-results
         run: npm run test:allure
 
+      # node:test nests everything under the `test/` directory; flatten so the
+      # tree top level is the test file, matching the pytest report.
+      - name: Flatten Allure tree
+        if: always()
+        run: node scripts/allure-flatten.mjs allure-results
+
       # Everything below builds + publishes the Allure report even when tests
       # fail, so the report always reflects the latest run.
       - name: Get previous Allure history
